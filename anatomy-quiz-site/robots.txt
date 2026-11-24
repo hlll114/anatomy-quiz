@@ -1,6 +1,0 @@
-# 允许所有搜索引擎抓取
-User-agent: *
-Allow: /
-
-# 站点地图（运行 bash tools/set-site-url.sh 后会自动替换为你的真实域名）
-Sitemap: https://YOUR-USERNAME.github.io/anatomy-quiz/sitemap.xml
