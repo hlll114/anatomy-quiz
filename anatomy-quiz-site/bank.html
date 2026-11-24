@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="增删改查解剖生理学题目，支持单选、判断、填空、名词卡和看图识别题，可导入导出 JSON 备份。">
+<meta name="theme-color" content="#2563eb">
+<link rel="icon" href="assets/images/icon.svg" type="image/svg+xml">
+<title>题库管理 · 人体解剖生理学刷题系统</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap topbar-inner">
+    <a class="brand" href="index.html">
+      <span class="brand-mark">解</span>
+      <span class="brand-text">解剖生理学 · 刷题</span>
+    </a>
+    <nav class="nav">
+      <a href="index.html">今日</a>
+      <a href="bank.html">题库</a>
+      <a href="quiz.html">刷题</a>
+      <a href="stats.html">统计</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap page">
+
+  <div class="page-head">
+    <h1>题库管理</h1>
+    <p>共 <strong id="count-all">0</strong> 题 · 支持六种题型（含看图识别），可自由增删改与导入导出</p>
+  </div>
+
+  <!-- 工具栏 -->
+  <section class="card card-pad">
+    <div class="toolbar">
+      <input class="input grow" id="search" type="search" placeholder="搜索题干关键词…">
+      <select class="select" id="filter-chapter">
+        <option value="">全部章节</option>
+      </select>
+      <select class="select" id="filter-type">
+        <option value="">全部题型</option>
+      </select>
+      <button class="btn" id="btn-add">＋ 新增题目</button>
+      <button class="btn btn-ghost" id="btn-io">导入 / 导出</button>
+    </div>
+  </section>
+
+  <!-- 列表 -->
+  <section class="card mt-16">
+    <div class="q-list" id="list"></div>
+  </section>
+
+</main>
+
+<!-- 新增 / 编辑弹窗 -->
+<div class="modal-mask hide" id="modal-edit">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="edit-title">新增题目</h2>
+      <button class="icon-btn" data-close="modal-edit" aria-label="关闭">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label for="f-type">题型</label>
+        <select class="select" id="f-type">
+          <option value="choice">单选题（四选一）</option>
+          <option value="reverse">反向题（根据描述选结构）</option>
+          <option value="judge">判断题（对 / 错）</option>
+          <option value="fill">填空题（输入答案）</option>
+          <option value="term">名词卡（自评认识与否）</option>
+          <option value="image">看图题（看图片选答案）</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="f-chapter">所属章节</label>
+        <select class="select" id="f-chapter"></select>
+      </div>
+
+      <div class="field">
+        <label for="f-stem">题干</label>
+        <textarea class="textarea" id="f-stem" rows="3" placeholder="例如：正常成人全身骨的数量是？"></textarea>
+        <div class="hint">填空题请用 6 个下划线 ______ 表示空格位置。</div>
+      </div>
+
+      <!-- 看图题的图片路径 -->
+      <div id="area-image" class="hide">
+        <div class="field">
+          <label for="f-image">图片路径或网址</label>
+          <input class="input" id="f-image" type="text" placeholder="assets/images/heart.svg">
+          <div class="hint">相对路径（如 assets/images/heart.svg）或完整网址（https://…）均可。内置图片见 assets/images 目录。</div>
+        </div>
+      </div>
+
+      <!-- 选择题选项区 -->
+      <div id="area-choice">
+        <div class="field">
+          <label>选项（点击左侧圆点设为正确答案）</label>
+          <div id="option-rows"></div>
+        </div>
+      </div>
+
+      <!-- 判断题答案区 -->
+      <div id="area-judge" class="hide">
+        <div class="field">
+          <label for="f-judge">正确答案</label>
+          <select class="select" id="f-judge">
+            <option value="0">正确</option>
+            <option value="1">错误</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- 填空 / 名词卡答案区 -->
+      <div id="area-text" class="hide">
+        <div class="field">
+          <label for="f-answers">正确答案</label>
+          <textarea class="textarea" id="f-answers" rows="3"
+            placeholder="每行一个可接受答案，第一行为标准答案"></textarea>
+          <div class="hint">填空题会自动忽略空格、标点和大小写差异。</div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="f-exp">解析（选填）</label>
+        <textarea class="textarea" id="f-exp" rows="2" placeholder="补充说明，答题后会显示"></textarea>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" data-close="modal-edit">取消</button>
+      <button class="btn" id="btn-save">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 导入导出弹窗 -->
+<div class="modal-mask hide" id="modal-io">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>导入 / 导出题库</h2>
+      <button class="icon-btn" data-close="modal-io" aria-label="关闭">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="notice">
+        <span>💾</span>
+        <span>导出可用于备份或分享给同学；导入不会覆盖已有题目，重复 ID 的题目会被跳过。</span>
+      </div>
+
+      <div class="field mt-16">
+        <label for="io-text">题库 JSON</label>
+        <textarea class="textarea" id="io-text" rows="8" placeholder="点击下方「导出到文本框」生成，或粘贴他人分享的题库 JSON"></textarea>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" id="btn-download">下载 .json</button>
+      <button class="btn btn-ghost" id="btn-reset">恢复内置题库</button>
+      <button class="btn" id="btn-import">导入到题库</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="assets/data.js"></script>
+<script src="assets/app.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var elList      = document.getElementById('list');
+  var elSearch    = document.getElementById('search');
+  var elChapter   = document.getElementById('filter-chapter');
+  var elType      = document.getElementById('filter-type');
+  var elCountAll  = document.getElementById('count-all');
+
+  var editingId = null;       // null 表示新增
+  var draftOptions = ['', '', '', ''];
+  var draftAnswer = 0;
+
+  /* ---------- 初始化筛选下拉 ---------- */
+  function fillSelects() {
+    App.CHAPTERS.forEach(function (c) {
+      var o = document.createElement('option');
+      o.value = c; o.textContent = c;
+      elChapter.appendChild(o);
+    });
+    Object.keys(App.TYPES).forEach(function (t) {
+      var o = document.createElement('option');
+      o.value = t; o.textContent = App.TYPES[t];
+      elType.appendChild(o);
+    });
+
+    var fc = document.getElementById('f-chapter');
+    App.CHAPTERS.forEach(function (c) {
+      var o = document.createElement('option');
+      o.value = c; o.textContent = c;
+      fc.appendChild(o);
+    });
+  }
+
+  /* ---------- 渲染列表 ---------- */
+  function render() {
+    var state = App.state();
+    var kw = elSearch.value.trim().toLowerCase();
+    var chap = elChapter.value;
+    var type = elType.value;
+
+    elCountAll.textContent = state.questions.length;
+
+    var list = state.questions.filter(function (q) {
+      if (chap && q.chapter !== chap) return false;
+      if (type && q.type !== type) return false;
+      if (kw) {
+        var hay = (q.stem + ' ' + (q.options || []).join(' ') + ' ' +
+                   (q.answers || []).join(' ') + ' ' + q.explanation).toLowerCase();
+        if (hay.indexOf(kw) < 0) return false;
+      }
+      return true;
+    });
+
+    if (!list.length) {
+      elList.innerHTML =
+        '<div class="empty">' +
+          '<div class="empty-icon">🔍</div>' +
+          '<h3>没有符合条件的题目</h3>' +
+          '<p>换个关键词，或点击「新增题目」自己添加一道</p>' +
+          '<button class="btn" id="empty-add">＋ 新增题目</button>' +
+        '</div>';
+      var ea = document.getElementById('empty-add');
+      if (ea) ea.addEventListener('click', function () { openEdit(null); });
+      return;
+    }
+
+    elList.innerHTML = list.map(function (q) {
+      var lvl = App.masteryLevel(q);
+      var lvlTag = lvl === 'master' ? '<span class="tag tag-master">已掌握</span>'
+                 : lvl === 'learning' ? '<span class="tag tag-learning">学习中</span>'
+                 : '<span class="tag tag-new">未作答</span>';
+      var stat = q.srs && q.srs.right + q.srs.wrong > 0
+        ? '对 ' + q.srs.right + ' / 错 ' + q.srs.wrong
+        : '';
+      var thumb = (q.type === 'image' && q.image)
+        ? '<img class="q-thumb" src="' + App.escapeHtml(q.image) + '" alt="题目配图">'
+        : '';
+
+      return '' +
+        '<div class="q-item">' +
+          thumb +
+          '<div class="q-item-main">' +
+            '<div class="q-item-stem">' + App.escapeHtml(q.stem) + '</div>' +
+            '<div class="q-item-meta">' +
+              '<span class="tag tag-type">' + (App.TYPES[q.type] || q.type) + '</span>' +
+              '<span class="tag tag-chap">' + App.escapeHtml(q.chapter) + '</span>' +
+              lvlTag +
+              (stat ? '<span class="text-muted text-sm">' + stat + '</span>' : '') +
+              '<span class="text-muted text-sm">' + App.dueLabel(q) + '</span>' +
+            '</div>' +
+          '</div>' +
+          '<div class="q-item-actions">' +
+            '<button class="btn btn-soft btn-sm" data-act="play" data-id="' + q.id + '">单练</button>' +
+            '<button class="btn btn-ghost btn-sm" data-act="edit" data-id="' + q.id + '">编辑</button>' +
+            '<button class="btn btn-danger btn-sm" data-act="del" data-id="' + q.id + '">删除</button>' +
+          '</div>' +
+        '</div>';
+    }).join('');
+  }
+
+  /* ---------- 事件委托 ---------- */
+  elList.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-act]');
+    if (!btn) return;
+    var id = btn.getAttribute('data-id');
+    var act = btn.getAttribute('data-act');
+
+    if (act === 'play') {
+      location.href = 'quiz.html?mode=ids&ids=' + encodeURIComponent(id);
+    } else if (act === 'edit') {
+      openEdit(id);
+    } else if (act === 'del') {
+      var state = App.state();
+      var q = state.questions.find(function (x) { return x.id === id; });
+      if (!q) return;
+      if (!confirm('确定删除这道题吗？\n\n' + q.stem.slice(0, 40) + '…\n\n删除后不可恢复（建议先导出备份）。')) return;
+      state.questions = state.questions.filter(function (x) { return x.id !== id; });
+      App.save();
+      render();
+      App.toast('已删除', 'success');
+    }
+  });
+
+  elSearch.addEventListener('input', render);
+  elChapter.addEventListener('change', render);
+  elType.addEventListener('change', render);
+
+  /* ---------- 弹窗通用 ---------- */
+  function openModal(id) { document.getElementById(id).classList.remove('hide'); }
+  function closeModal(id) { document.getElementById(id).classList.add('hide'); }
+
+  document.querySelectorAll('[data-close]').forEach(function (b) {
+    b.addEventListener('click', function () { closeModal(b.getAttribute('data-close')); });
+  });
+  document.querySelectorAll('.modal-mask').forEach(function (m) {
+    m.addEventListener('click', function (e) {
+      if (e.target === m) m.classList.add('hide');
+    });
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      document.querySelectorAll('.modal-mask').forEach(function (m) { m.classList.add('hide'); });
+    }
+  });
+
+  /* ---------- 选项编辑区 ---------- */
+  function renderOptionRows() {
+    var box = document.getElementById('option-rows');
+    box.innerHTML = draftOptions.map(function (txt, i) {
+      var letter = String.fromCharCode(65 + i);
+      return '' +
+        '<div class="field" style="margin-bottom:10px;">' +
+          '<div style="display:flex; gap:8px; align-items:center;">' +
+            '<label style="margin:0; display:flex; align-items:center; gap:6px; cursor:pointer;">' +
+              '<input type="radio" name="opt-answer" value="' + i + '"' +
+                (draftAnswer === i ? ' checked' : '') + ' style="cursor:pointer; width:16px; height:16px;">' +
+              '<span style="font-weight:700;">' + letter + '</span>' +
+            '</label>' +
+            '<input class="input opt-input" data-i="' + i + '" value="' + App.escapeHtml(txt) + '"' +
+              ' placeholder="选项 ' + letter + '">' +
+          '</div>' +
+        '</div>';
+    }).join('');
+
+    box.querySelectorAll('.opt-input').forEach(function (inp) {
+      inp.addEventListener('input', function () {
+        draftOptions[Number(inp.getAttribute('data-i'))] = inp.value;
+      });
+    });
+    box.querySelectorAll('input[name="opt-answer"]').forEach(function (r) {
+      r.addEventListener('change', function () { draftAnswer = Number(r.value); });
+    });
+  }
+
+  function syncFormByType() {
+    var type = document.getElementById('f-type').value;
+    var isChoice = (type === 'choice' || type === 'reverse' || type === 'image');
+    document.getElementById('area-choice').classList.toggle('hide', !isChoice);
+    document.getElementById('area-image').classList.toggle('hide', type !== 'image');
+    document.getElementById('area-judge').classList.toggle('hide', type !== 'judge');
+    document.getElementById('area-text').classList.toggle('hide',
+      !(type === 'fill' || type === 'term'));
+  }
+
+  document.getElementById('f-type').addEventListener('change', syncFormByType);
+
+  /* ---------- 打开编辑 ---------- */
+  function openEdit(id) {
+    editingId = id;
+    var q = null;
+    if (id) {
+      q = App.state().questions.find(function (x) { return x.id === id; }) || null;
+    }
+
+    document.getElementById('edit-title').textContent = q ? '编辑题目' : '新增题目';
+    document.getElementById('f-stem').value = q ? q.stem : '';
+    document.getElementById('f-exp').value = q ? q.explanation : '';
+    document.getElementById('f-type').value = q ? q.type : 'choice';
+    document.getElementById('f-chapter').value = q ? q.chapter : App.CHAPTERS[0];
+    document.getElementById('f-image').value = q ? (q.image || '') : '';
+
+    if (q && (q.type === 'choice' || q.type === 'reverse' || q.type === 'image')) {
+      draftOptions = (q.options || []).slice();
+      while (draftOptions.length < 4) draftOptions.push('');
+      draftAnswer = q.answerIndex || 0;
+    } else {
+      draftOptions = ['', '', '', ''];
+      draftAnswer = 0;
+    }
+    renderOptionRows();
+
+    document.getElementById('f-judge').value = q && q.type === 'judge' ? String(q.answerIndex) : '0';
+
+    var ansText = '';
+    if (q && (q.type === 'fill' || q.type === 'term')) {
+      ansText = (q.answers || []).join('\n');
+    }
+    document.getElementById('f-answers').value = ansText;
+
+    syncFormByType();
+    openModal('modal-edit');
+    document.getElementById('f-stem').focus();
+  }
+
+  document.getElementById('btn-add').addEventListener('click', function () { openEdit(null); });
+
+  /* ---------- 保存 ---------- */
+  document.getElementById('btn-save').addEventListener('click', function () {
+    var type = document.getElementById('f-type').value;
+    var stem = document.getElementById('f-stem').value.trim();
+    var chapter = document.getElementById('f-chapter').value;
+
+    if (!stem) { App.toast('题干不能为空', 'error'); return; }
+
+    var payload = {
+      type: type,
+      chapter: chapter,
+      stem: stem,
+      explanation: document.getElementById('f-exp').value.trim()
+    };
+
+    if (type === 'choice' || type === 'reverse' || type === 'image') {
+      var opts = draftOptions.map(function (s) { return String(s).trim(); });
+      while (opts.length && !opts[opts.length - 1]) opts.pop();
+      if (opts.length < 2) { App.toast('至少填写 2 个选项', 'error'); return; }
+      if (opts.some(function (s) { return !s; })) { App.toast('选项不能留空', 'error'); return; }
+      if (draftAnswer >= opts.length) { App.toast('正确答案超出选项范围', 'error'); return; }
+      payload.options = opts;
+      payload.answerIndex = draftAnswer;
+
+      if (type === 'image') {
+        var imgPath = document.getElementById('f-image').value.trim();
+        if (!imgPath) { App.toast('请填写图片路径', 'error'); return; }
+        payload.image = imgPath;
+      }
+
+    } else if (type === 'judge') {
+      payload.options = ['正确', '错误'];
+      payload.answerIndex = Number(document.getElementById('f-judge').value);
+
+    } else {
+      var lines = document.getElementById('f-answers').value
+        .split('\n')
+        .map(function (s) { return s.trim(); })
+        .filter(Boolean);
+      if (!lines.length) { App.toast('请填写正确答案', 'error'); return; }
+      payload.answers = lines;
+    }
+
+    var state = App.state();
+
+    if (editingId) {
+      var idx = state.questions.findIndex(function (x) { return x.id === editingId; });
+      if (idx >= 0) {
+        // 保留原有复习进度，只更新内容
+        payload.id = editingId;
+        payload.srs = state.questions[idx].srs;
+        payload.createdAt = state.questions[idx].createdAt;
+        state.questions[idx] = App.hydrate(payload);
+      }
+    } else {
+      payload.id = App.uid();
+      state.questions.push(App.hydrate(payload));
+    }
+
+    App.save();
+    closeModal('modal-edit');
+    render();
+    App.toast(editingId ? '已保存修改' : '题目已添加', 'success');
+  });
+
+  /* ---------- 导入导出 ---------- */
+  document.getElementById('btn-io').addEventListener('click', function () {
+    openModal('modal-io');
+  });
+
+  document.getElementById('btn-download').addEventListener('click', function () {
+    var data = JSON.stringify(App.state().questions, null, 2);
+    document.getElementById('io-text').value = data;
+
+    try {
+      var blob = new Blob([data], { type: 'application/json;charset=utf-8' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'anatomy-quiz-bank-' + App.formatDate(Date.now()) + '.json';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+      App.toast('已生成备份文件', 'success');
+    } catch (e) {
+      App.toast('下载失败，可手动复制文本框内容', 'error');
+    }
+  });
+
+  document.getElementById('btn-import').addEventListener('click', function () {
+    var txt = document.getElementById('io-text').value.trim();
+    if (!txt) { App.toast('请先粘贴题库 JSON', 'error'); return; }
+
+    var parsed;
+    try {
+      parsed = JSON.parse(txt);
+    } catch (e) {
+      App.toast('JSON 格式有误，无法解析', 'error');
+      return;
+    }
+
+    var arr = Array.isArray(parsed) ? parsed
+            : (parsed && Array.isArray(parsed.questions)) ? parsed.questions
+            : null;
+    if (!arr) { App.toast('需要题目数组格式', 'error'); return; }
+
+    var state = App.state();
+    var ids = {};
+    state.questions.forEach(function (q) { ids[q.id] = true; });
+
+    var added = 0, skipped = 0;
+    arr.forEach(function (raw) {
+      var q = App.hydrate(raw);
+      if (!q) { skipped++; return; }
+      if (ids[q.id]) { skipped++; return; }
+      ids[q.id] = true;
+      state.questions.push(q);
+      added++;
+    });
+
+    App.save();
+    render();
+    closeModal('modal-io');
+    App.toast('导入完成：新增 ' + added + ' 题，跳过 ' + skipped + ' 题', 'success');
+  });
+
+  document.getElementById('btn-reset').addEventListener('click', function () {
+    if (!confirm('恢复内置题库会清空你添加的所有题目和答题记录，确定继续吗？')) return;
+    App.resetAll();
+    render();
+    closeModal('modal-io');
+    App.toast('已恢复为内置题库', 'success');
+  });
+
+  /* ---------- 启动 ---------- */
+  fillSelects();
+  render();
+
+})();
+</script>
+
+</body>
+</html>

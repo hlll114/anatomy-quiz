@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 270" width="440" height="270" role="img" aria-label="神经元结构示意图">
+  <defs>
+    <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 Z" fill="#be123c"/>
+    </marker>
+  </defs>
+  <rect width="440" height="270" fill="#ffffff"/>
+
+  <!-- 树突 -->
+  <g stroke="#475569" stroke-width="3" stroke-linecap="round" fill="none">
+    <path d="M74,112 L38,80 M38,80 L24,60 M38,80 L20,88"/>
+    <path d="M68,100 L46,56 M46,56 L30,40 M46,56 L58,34"/>
+    <path d="M70,148 L34,172 M34,172 L16,166 M34,172 L22,190"/>
+    <path d="M78,160 L56,198 M56,198 L40,214 M56,198 L68,220"/>
+  </g>
+
+  <!-- 胞体 -->
+  <circle cx="104" cy="134" r="30" fill="#e2e8f0" stroke="#475569" stroke-width="2.5"/>
+  <circle cx="100" cy="130" r="13" fill="#94a3b8"/>
+
+  <!-- 轴突 -->
+  <line x1="134" y1="134" x2="372" y2="134" stroke="#475569" stroke-width="5" stroke-linecap="round"/>
+
+  <!-- 被标注的髓鞘 -->
+  <g fill="#fecdd3" stroke="#be123c" stroke-width="1.8">
+    <rect x="158" y="118" width="46" height="32" rx="15"/>
+    <rect x="216" y="118" width="46" height="32" rx="15"/>
+    <rect x="274" y="118" width="46" height="32" rx="15"/>
+  </g>
+
+  <!-- 轴突末梢 -->
+  <g stroke="#475569" stroke-width="3" stroke-linecap="round" fill="none">
+    <path d="M372,134 L400,110 M372,134 L404,134 M372,134 L400,158"/>
+  </g>
+  <g fill="#475569">
+    <circle cx="403" cy="106" r="5"/>
+    <circle cx="408" cy="134" r="5"/>
+    <circle cx="403" cy="162" r="5"/>
+  </g>
+
+  <!-- 标注 -->
+  <line x1="238" y1="196" x2="238" y2="156" stroke="#be123c" stroke-width="2.5" marker-end="url(#ar)"/>
+  <circle cx="238" cy="214" r="16" fill="#be123c"/>
+  <text x="238" y="220" fill="#ffffff" font-size="17" font-weight="700" text-anchor="middle" font-family="sans-serif">?</text>
+
+  <text x="220" y="258" font-size="12.5" fill="#94a3b8" text-anchor="middle" font-family="sans-serif">神经元结构示意图</text>
+</svg>

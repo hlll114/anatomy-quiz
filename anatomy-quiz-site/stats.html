@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="按章节和题型统计解剖生理学掌握度，自动收集错题，查看学习进度与正确率曲线。">
+<meta name="theme-color" content="#2563eb">
+<link rel="icon" href="assets/images/icon.svg" type="image/svg+xml">
+<title>学习统计与错题本 · 人体解剖生理学</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap topbar-inner">
+    <a class="brand" href="index.html">
+      <span class="brand-mark">解</span>
+      <span class="brand-text">解剖生理学 · 刷题</span>
+    </a>
+    <nav class="nav">
+      <a href="index.html">今日</a>
+      <a href="bank.html">题库</a>
+      <a href="quiz.html">刷题</a>
+      <a href="stats.html">统计</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap page">
+
+  <div class="page-head">
+    <h1>学习统计</h1>
+    <p>看看哪些章节还薄弱，错题本会自动收集答错的题目</p>
+  </div>
+
+  <!-- 概览 -->
+  <section class="stat-grid">
+    <div class="stat">
+      <div class="stat-label">题库总数</div>
+      <div class="stat-value" id="st-total">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">已掌握</div>
+      <div class="stat-value is-success" id="st-master">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">累计答题</div>
+      <div class="stat-value is-primary" id="st-answered">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">累计正确率</div>
+      <div class="stat-value" id="st-acc">—</div>
+    </div>
+  </section>
+
+  <!-- 章节掌握度 -->
+  <section class="card mt-24">
+    <div class="card-head">
+      <h2>各章节掌握度</h2>
+      <span class="sub">连续答对 3 次记为已掌握</span>
+    </div>
+    <div class="chart-box">
+      <canvas id="chart-chapter" height="200"></canvas>
+    </div>
+  </section>
+
+  <!-- 题型掌握度 -->
+  <section class="card mt-16">
+    <div class="card-head">
+      <h2>各题型掌握度</h2>
+      <span class="sub">看看哪种题型最薄弱</span>
+    </div>
+    <div class="chart-box">
+      <canvas id="chart-type" height="160"></canvas>
+    </div>
+  </section>
+
+  <!-- 错题本 -->
+  <section class="card mt-24">
+    <div class="card-head">
+      <h2>错题本</h2>
+      <span class="sub" id="wrong-count">0 题</span>
+    </div>
+    <div class="q-list" id="wrong-list"></div>
+    <div class="card-pad hide" id="wrong-actions" style="border-top:1px solid var(--border-soft);">
+      <a class="btn btn-block" id="btn-practice-wrong" href="quiz.html?mode=wrong">一次重练全部错题</a>
+    </div>
+  </section>
+
+  <!-- 数据管理 -->
+  <section class="card mt-24">
+    <div class="card-head">
+      <h2>数据管理</h2>
+      <span class="sub">所有数据保存在本机浏览器</span>
+    </div>
+    <div class="card-pad">
+      <p class="text-sm text-muted" id="storage-info">正在检测本地存储…</p>
+      <div class="gap-row mt-16">
+        <a class="btn btn-ghost" href="bank.html">去题库页备份数据</a>
+        <button class="btn btn-danger" id="btn-clear-records">清空学习进度</button>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script src="assets/data.js"></script>
+<script src="assets/app.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var s = App.stats();
+  var state = App.state();
+
+  /* ---------- 概览 ---------- */
+  document.getElementById('st-total').textContent = s.total;
+  document.getElementById('st-master').textContent = s.mastered;
+  document.getElementById('st-answered').textContent = s.answered;
+  document.getElementById('st-acc').textContent = s.answered ? s.accuracy + '%' : '—';
+
+  /* ---------- Canvas 横向条形图 ---------- */
+  function drawBars(canvas, rows) {
+    if (!canvas || !rows.length) return;
+
+    var dpr = window.devicePixelRatio || 1;
+    // 父容器带内边距，需扣除左右 padding，否则 canvas 会比可视区更宽
+    var boxStyle = getComputedStyle(canvas.parentNode);
+    var padL = parseFloat(boxStyle.paddingLeft) || 0;
+    var padR = parseFloat(boxStyle.paddingRight) || 0;
+    var cssW = Math.max(240, canvas.parentNode.clientWidth - padL - padR);
+    var rowH = 34;
+    var padTop = 8;
+    var labelW = Math.min(110, Math.max(78, cssW * 0.22));
+    var valueW = 62;
+    var cssH = rows.length * rowH + padTop * 2;
+
+    canvas.width = cssW * dpr;
+    canvas.height = cssH * dpr;
+    canvas.style.width = cssW + 'px';
+    canvas.style.height = cssH + 'px';
+
+    var ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, cssW, cssH);
+
+    var trackX = labelW;
+    var trackW = Math.max(40, cssW - labelW - valueW);
+    var barH = 12;
+
+    rows.forEach(function (row, i) {
+      var y = padTop + i * rowH;
+      var cy = y + rowH / 2;
+
+      // 标签
+      ctx.fillStyle = '#4b5563';
+      ctx.font = '13px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      var label = row.label;
+      // 超长标签截断
+      var maxLabelW = labelW - 12;
+      if (ctx.measureText(label).width > maxLabelW) {
+        while (label.length > 1 && ctx.measureText(label + '…').width > maxLabelW) {
+          label = label.slice(0, -1);
+        }
+        label += '…';
+      }
+      ctx.fillText(label, 0, cy);
+
+      var ratio = Math.max(0, Math.min(1, row.ratio || 0));
+
+      // 轨道
+      roundRect(ctx, trackX, cy - barH / 2, trackW, barH, barH / 2);
+      ctx.fillStyle = '#eef1f6';
+      ctx.fill();
+
+      // 进度
+      if (ratio > 0) {
+        var w = Math.max(barH, trackW * ratio);
+        roundRect(ctx, trackX, cy - barH / 2, w, barH, barH / 2);
+        var grad = ctx.createLinearGradient(trackX, 0, trackX + trackW, 0);
+        grad.addColorStop(0, '#2563eb');
+        grad.addColorStop(1, '#60a5fa');
+        ctx.fillStyle = grad;
+        ctx.fill();
+      }
+
+      // 数值
+      ctx.fillStyle = '#8a94a6';
+      ctx.font = '12px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(row.text, cssW, cy);
+    });
+  }
+
+  function roundRect(ctx, x, y, w, h, r) {
+    r = Math.min(r, h / 2, w / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.arcTo(x + w, y, x + w, y + r, r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+    ctx.lineTo(x + r, y + h);
+    ctx.arcTo(x, y + h, x, y + h - r, r);
+    ctx.lineTo(x, y + r);
+    ctx.arcTo(x, y, x + r, y, r);
+    ctx.closePath();
+  }
+
+  var chapterRows = s.chapterStats.map(function (c) {
+    return {
+      label: c.chapter,
+      ratio: c.total ? c.mastered / c.total : 0,
+      text: c.mastered + '/' + c.total
+    };
+  });
+
+  var typeRows = s.typeStats.map(function (t) {
+    return {
+      label: t.label,
+      ratio: t.total ? t.mastered / t.total : 0,
+      text: t.mastered + '/' + t.total
+    };
+  });
+
+  function drawAll() {
+    drawBars(document.getElementById('chart-chapter'), chapterRows);
+    drawBars(document.getElementById('chart-type'), typeRows);
+  }
+
+  drawAll();
+
+  var resizeTimer = null;
+  window.addEventListener('resize', function () {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(drawAll, 150);
+  });
+
+  /* ---------- 错题本 ---------- */
+  var wrong = state.questions
+    .filter(function (q) { return q.srs && q.srs.wrong > 0; })
+    .sort(function (a, b) { return b.srs.wrong - a.srs.wrong; });
+
+  var elWrongCount = document.getElementById('wrong-count');
+  var elWrongList = document.getElementById('wrong-list');
+  var elWrongActions = document.getElementById('wrong-actions');
+
+  elWrongCount.textContent = wrong.length + ' 题';
+
+  if (!wrong.length) {
+    elWrongList.innerHTML =
+      '<div class="empty">' +
+        '<div class="empty-icon">✅</div>' +
+        '<h3>错题本是空的</h3>' +
+        '<p>答错过的题目会自动出现在这里，方便重点突破</p>' +
+        '<a class="btn btn-ghost" href="quiz.html?mode=random&count=10">去练习</a>' +
+      '</div>';
+  } else {
+    elWrongActions.classList.remove('hide');
+    elWrongList.innerHTML = wrong.map(function (q) {
+      return '' +
+        '<div class="q-item">' +
+          '<div class="q-item-main">' +
+            '<div class="q-item-stem">' + App.escapeHtml(q.stem) + '</div>' +
+            '<div class="q-item-meta">' +
+              '<span class="tag tag-type">' + (App.TYPES[q.type] || q.type) + '</span>' +
+              '<span class="tag tag-chap">' + App.escapeHtml(q.chapter) + '</span>' +
+              '<span class="tag tag-learning">错 ' + q.srs.wrong + ' 次</span>' +
+              (q.srs.lastWrong
+                ? '<span class="text-muted text-sm">上次 ' + App.formatDate(q.srs.lastWrong) + '</span>'
+                : '') +
+            '</div>' +
+          '</div>' +
+          '<div class="q-item-actions">' +
+            '<a class="btn btn-soft btn-sm" href="quiz.html?mode=ids&ids=' +
+              encodeURIComponent(q.id) + '">重练</a>' +
+          '</div>' +
+        '</div>';
+    }).join('');
+  }
+
+  /* ---------- 存储状态 ---------- */
+  var info = document.getElementById('storage-info');
+  if (!App.storageOK) {
+    info.innerHTML = '⚠️ 当前浏览器禁用了本地存储，数据只在本次会话内有效。请检查隐私设置，或改用 Chrome / Edge 打开。';
+  } else {
+    var bytes = 0;
+    try {
+      bytes = (localStorage.getItem(App.STORAGE_KEY) || '').length;
+    } catch (e) { bytes = 0; }
+    info.textContent = '数据已保存在本机浏览器（localStorage），约 ' +
+      (bytes / 1024).toFixed(1) + ' KB。清除浏览器数据会丢失，建议定期在题库页导出备份。';
+  }
+
+  /* ---------- 清空进度 ---------- */
+  document.getElementById('btn-clear-records').addEventListener('click', function () {
+    if (!confirm('将清空所有答题记录和复习进度（题目本身保留），确定继续吗？')) return;
+    var st = App.state();
+    st.records = [];
+    st.questions.forEach(function (q) { q.srs = App.freshSrs(); });
+    App.save();
+    App.toast('学习进度已清空', 'success');
+    setTimeout(function () { location.reload(); }, 600);
+  });
+
+})();
+</script>
+
+</body>
+</html>

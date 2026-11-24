@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 430 320" width="430" height="320" role="img" aria-label="脑的外侧面示意图">
+  <defs>
+    <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 Z" fill="#be123c"/>
+    </marker>
+  </defs>
+  <rect width="430" height="320" fill="#ffffff"/>
+
+  <!-- 脑干 -->
+  <path d="M232,200 L232,272 C232,282 246,282 246,272 L246,200 Z"
+        fill="#e2e8f0" stroke="#475569" stroke-width="2"/>
+
+  <!-- 大脑半球 -->
+  <path d="M70,150 C70,86 128,44 196,44 C272,44 328,86 328,140
+           C328,180 300,206 262,212 L150,212 C104,212 70,190 70,150 Z"
+        fill="#f8fafc" stroke="#475569" stroke-width="2.5"/>
+
+  <!-- 脑沟示意 -->
+  <g fill="none" stroke="#cbd5e1" stroke-width="2.5" stroke-linecap="round">
+    <path d="M120,90 C136,80 148,96 140,108"/>
+    <path d="M170,70 C186,62 200,80 190,94"/>
+    <path d="M224,66 C240,60 252,78 242,92"/>
+    <path d="M272,84 C286,78 296,94 286,106"/>
+    <path d="M112,140 C130,132 142,150 132,162"/>
+    <path d="M172,132 C190,124 202,144 192,156"/>
+    <path d="M232,126 C250,120 262,140 252,152"/>
+    <path d="M282,132 C296,128 304,144 294,156"/>
+    <path d="M152,178 C172,170 184,190 174,202"/>
+    <path d="M222,176 C242,168 254,188 244,200"/>
+  </g>
+
+  <!-- 被标注的小脑 -->
+  <ellipse cx="176" cy="242" rx="62" ry="38" fill="#fecdd3" stroke="#be123c" stroke-width="2.2"/>
+  <g fill="none" stroke="#f9a8b4" stroke-width="2">
+    <path d="M126,232 C148,226 204,226 226,232"/>
+    <path d="M124,246 C148,240 204,240 228,246"/>
+    <path d="M130,260 C150,254 202,254 222,260"/>
+  </g>
+
+  <!-- 标注 -->
+  <line x1="86" y1="282" x2="118" y2="258" stroke="#be123c" stroke-width="2.5" marker-end="url(#ar)"/>
+  <circle cx="72" cy="290" r="16" fill="#be123c"/>
+  <text x="72" y="296" fill="#ffffff" font-size="17" font-weight="700" text-anchor="middle" font-family="sans-serif">?</text>
+
+  <text x="300" y="306" font-size="12.5" fill="#94a3b8" text-anchor="middle" font-family="sans-serif">脑的外侧面示意图</text>
+</svg>

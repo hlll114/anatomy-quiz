@@ -1,0 +1,19 @@
+{
+  "name": "人体解剖生理学 · 刷题系统",
+  "short_name": "解剖刷题",
+  "description": "人体解剖生理学在线刷题：单选、判断、填空、名词卡、看图识别题，按间隔重复自动安排复习。",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f6fa",
+  "theme_color": "#2563eb",
+  "lang": "zh-CN",
+  "icons": [
+    {
+      "src": "assets/images/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
