@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="解剖生理学在线答题：单选题、判断题、填空题、名词卡与看图识别题，答完即时判分并显示解析。">
+<meta name="theme-color" content="#2563eb">
+<link rel="icon" href="assets/images/icon.svg" type="image/svg+xml">
+<title>在线刷题 · 人体解剖生理学（含看图识别题）</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap topbar-inner">
+    <a class="brand" href="index.html">
+      <span class="brand-mark">解</span>
+      <span class="brand-text">解剖生理学 · 刷题</span>
+    </a>
+    <nav class="nav">
+      <a href="index.html">今日</a>
+      <a href="bank.html">题库</a>
+      <a href="quiz.html">刷题</a>
+      <a href="stats.html">统计</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap page">
+  <div class="quiz-shell" id="quiz-shell">
+
+    <!-- 顶部进度 -->
+    <div class="quiz-top" id="quiz-top">
+      <span class="quiz-count" id="quiz-count">第 0 / 0 题</span>
+      <div class="progress"><div class="progress-bar" id="quiz-progress"></div></div>
+      <a href="index.html" class="text-muted text-sm" id="btn-quit">退出</a>
+    </div>
+
+    <!-- 题目区 -->
+    <div id="question-area"></div>
+
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script src="assets/data.js"></script>
+<script src="assets/app.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var shell     = document.getElementById('quiz-shell');
+  var topBar    = document.getElementById('quiz-top');
+  var area      = document.getElementById('question-area');
+  var elCount   = document.getElementById('quiz-count');
+  var elProg    = document.getElementById('quiz-progress');
+
+  var queue = [];
+  var idx = 0;
+  var answered = false;
+  var locked = false;
+  var results = [];
+  var startAt = Date.now();
+  var revealed = false;
+
+  /* ---------- 组卷 ---------- */
+  function buildQueue() {
+    var p = App.query();
+    var mode = p.mode || 'due';
+
+    if (mode === 'ids' && p.ids) {
+      return App.buildList('ids', { ids: p.ids.split(',') });
+    }
+    if (mode === 'chapter') {
+      return App.buildList('chapter', { chapter: p.chapter, limit: Number(p.count) || 0 });
+    }
+    if (mode === 'type') {
+      return App.buildList('type', { type: p.type, limit: Number(p.count) || 0 });
+    }
+    if (mode === 'wrong') {
+      return App.buildList('wrong', { limit: Number(p.count) || 0 });
+    }
+    if (mode === 'due') {
+      return App.buildList('due');
+    }
+    if (mode === 'random') {
+      return App.buildList('random', { limit: Number(p.count) || 10 });
+    }
+    return App.buildList('all');
+  }
+
+  /* ---------- 题干渲染 ---------- */
+  function renderStem(q) {
+    var s = App.escapeHtml(q.stem);
+    if (q.type === 'fill') {
+      s = s.replace(/_{3,}/g, '<span class="blank">?</span>');
+    }
+    return s;
+  }
+
+  /* ---------- 渲染当前题 ---------- */
+  function renderQuestion() {
+    answered = false;
+    locked = false;
+    revealed = false;
+
+    var q = queue[idx];
+    if (!q) { finish(); return; }
+
+    elCount.textContent = '第 ' + (idx + 1) + ' / ' + queue.length + ' 题';
+    elProg.style.width = ((idx) / queue.length * 100) + '%';
+
+    var lvl = App.masteryLevel(q);
+    var lvlText = lvl === 'master' ? '已掌握' : lvl === 'learning' ? '学习中' : '新题';
+    var lvlClass = lvl === 'master' ? 'tag-master' : lvl === 'learning' ? 'tag-learning' : 'tag-new';
+
+    // 看图题：在题干下方插入示意图
+    var figureHtml = '';
+    if (q.type === 'image' && q.image) {
+      figureHtml =
+        '<figure class="q-figure">' +
+          '<img src="' + App.escapeHtml(q.image) + '" alt="解剖结构示意图" ' +
+               'onerror="this.classList.add(\'img-broken\');this.alt=\'图片加载失败：请检查图片路径\';">' +
+        '</figure>';
+    }
+
+    var html = '' +
+      '<div class="card question-card">' +
+        '<div class="q-meta">' +
+          '<span class="tag tag-type">' + (App.TYPES[q.type] || q.type) + '</span>' +
+          '<span class="tag tag-chap">' + App.escapeHtml(q.chapter) + '</span>' +
+          '<span class="tag ' + lvlClass + '">' + lvlText + '</span>' +
+        '</div>' +
+        '<div class="q-stem">' + renderStem(q) + '</div>' +
+        figureHtml +
+        '<div id="answer-area"></div>' +
+        '<div id="feedback-area"></div>' +
+        '<div class="quiz-actions" id="actions"></div>' +
+      '</div>';
+
+    area.innerHTML = html;
+
+    var answerArea = document.getElementById('answer-area');
+
+    if (q.type === 'choice' || q.type === 'reverse' ||
+        q.type === 'judge' || q.type === 'image') {
+      renderOptions(answerArea, q);
+    } else if (q.type === 'fill') {
+      renderFill(answerArea, q);
+    } else {
+      renderTerm(answerArea, q);
+    }
+  }
+
+  /* ---------- 选择题 / 判断题 ---------- */
+  function renderOptions(box, q) {
+    var opts = q.options || [];
+    var isJudge = q.type === 'judge';
+
+    var wrap = document.createElement('div');
+    wrap.className = 'options';
+
+    opts.forEach(function (text, i) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'option';
+      btn.setAttribute('data-i', String(i));
+      btn.innerHTML =
+        '<span class="option-key">' + (isJudge ? (i === 0 ? '✓' : '✗') : String.fromCharCode(65 + i)) + '</span>' +
+        '<span>' + App.escapeHtml(text) + '</span>';
+      btn.addEventListener('click', function () { answerChoice(q, i); });
+      wrap.appendChild(btn);
+    });
+
+    box.appendChild(wrap);
+    addNextButton();
+  }
+
+  function answerChoice(q, choice) {
+    if (locked) return;
+    locked = true;
+    answered = true;
+
+    var res = App.grade(q, choice);
+    markOptions(q, choice);
+    afterAnswer(q, res, choice);
+  }
+
+  function markOptions(q, chosen) {
+    var btns = document.querySelectorAll('.option');
+    btns.forEach(function (b) {
+      var i = Number(b.getAttribute('data-i'));
+      b.disabled = true;
+      if (i === q.answerIndex) b.classList.add('is-correct');
+      else if (i === chosen) b.classList.add('is-wrong');
+      else b.classList.add('is-dimmed');
+    });
+  }
+
+  /* ---------- 填空题 ---------- */
+  function renderFill(box, q) {
+    var wrap = document.createElement('div');
+    wrap.className = 'fill-box';
+    wrap.innerHTML =
+      '<input class="input" id="fill-input" type="text" placeholder="输入答案后按回车提交" autocomplete="off" autocapitalize="off">' +
+      '<button class="btn" id="fill-submit">提交</button>';
+    box.appendChild(wrap);
+
+    var input = document.getElementById('fill-input');
+    var submit = document.getElementById('fill-submit');
+
+    function doSubmit() {
+      if (locked) return;
+      var val = input.value.trim();
+      if (!val) { App.toast('请先输入答案', 'error'); return; }
+      locked = true;
+      answered = true;
+      input.disabled = true;
+      submit.disabled = true;
+      var res = App.grade(q, val);
+      afterAnswer(q, res, val);
+    }
+
+    submit.addEventListener('click', doSubmit);
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); doSubmit(); }
+    });
+    input.focus();
+
+    addNextButton();
+  }
+
+  /* ---------- 名词卡 ---------- */
+  function renderTerm(box, q) {
+    var wrap = document.createElement('div');
+    wrap.innerHTML =
+      '<button class="btn btn-soft btn-lg" id="reveal-btn">显示答案</button>' +
+      '<div id="term-answer-box"></div>';
+    box.appendChild(wrap);
+
+    document.getElementById('reveal-btn').addEventListener('click', function () {
+      if (revealed) return;
+      revealed = true;
+
+      var ans = (q.answers && q.answers[0]) || '（未填写答案）';
+      document.getElementById('reveal-btn').classList.add('hide');
+      document.getElementById('term-answer-box').innerHTML =
+        '<div class="term-answer">' +
+          '<span class="label">参考答案</span>' +
+          App.escapeHtml(ans) +
+        '</div>' +
+        '<div class="gap-row mt-16">' +
+          '<button class="btn btn-ghost" id="self-unknown">没想起来</button>' +
+          '<button class="btn" id="self-know">想起来了</button>' +
+        '</div>';
+
+      document.getElementById('self-know').addEventListener('click', function () {
+        if (locked) return;
+        locked = true; answered = true;
+        finishTerm(q, 'know');
+      });
+      document.getElementById('self-unknown').addEventListener('click', function () {
+        if (locked) return;
+        locked = true; answered = true;
+        finishTerm(q, 'unknown');
+      });
+    });
+
+    // 名词卡同样需要「下一题」按钮，否则自评后无法继续
+    addNextButton();
+  }
+
+  function finishTerm(q, self) {
+    var res = App.grade(q, self);
+    document.querySelectorAll('#term-answer-box .btn').forEach(function (b) { b.disabled = true; });
+    afterAnswer(q, res, self);
+  }
+
+  /* ---------- 答题后统一处理 ---------- */
+  function afterAnswer(q, res, response) {
+    // 1. 更新复习计划并持久化
+    App.applyResult(q, res.correct);
+    App.recordResult(q, res.correct);
+    App.save();
+
+    results.push({ id: q.id, correct: res.correct, stem: q.stem, type: q.type });
+
+    // 2. 渲染反馈
+    var fb = document.getElementById('feedback-area');
+    var showAnswer = !res.correct || q.type === 'fill' || q.type === 'term';
+
+    var html = '' +
+      '<div class="feedback ' + (res.correct ? 'is-correct' : 'is-wrong') + '">' +
+        '<div class="feedback-head">' +
+          (res.correct ? '✓ 回答正确' : '✗ 回答错误') +
+        '</div>' +
+        (showAnswer && res.answerText
+          ? '<div class="feedback-answer">正确答案：<b>' + App.escapeHtml(res.answerText) + '</b></div>'
+          : '') +
+        (q.explanation
+          ? '<div class="feedback-exp">解析：' + App.escapeHtml(q.explanation) + '</div>'
+          : '') +
+      '</div>';
+    fb.innerHTML = html;
+
+    updateNextButton();
+    elProg.style.width = ((idx + 1) / queue.length * 100) + '%';
+  }
+
+  /* ---------- 下一题按钮 ---------- */
+  function addNextButton() {
+    var actions = document.getElementById('actions');
+    if (!actions) return;
+    actions.innerHTML = '<button class="btn hide" id="btn-next">下一题 →</button>';
+  }
+
+  function updateNextButton() {
+    var btn = document.getElementById('btn-next');
+    if (!btn) return;
+    btn.classList.remove('hide');
+    btn.textContent = (idx + 1 >= queue.length) ? '查看结果 →' : '下一题 →';
+    btn.onclick = next;
+    btn.focus();
+  }
+
+  function next() {
+    idx++;
+    if (idx >= queue.length) { finish(); return; }
+    renderQuestion();
+  }
+
+  /* ---------- 结果页 ---------- */
+  function finish() {
+    topBar.classList.add('hide');
+
+    var right = results.filter(function (r) { return r.correct; }).length;
+    var total = results.length;
+    var wrong = results.filter(function (r) { return !r.correct; });
+    var acc = total ? Math.round(right / total * 100) : 0;
+    var dur = Date.now() - startAt;
+
+    var comment = acc >= 90 ? '掌握得很扎实，继续保持！'
+                : acc >= 70 ? '整体不错，把错题再过一遍就更稳了。'
+                : acc >= 50 ? '基础还需巩固，建议把错题重练一次。'
+                : '别急，先看解析，明天再来一轮。';
+
+    var wrongHtml = '';
+    if (wrong.length) {
+      wrongHtml =
+        '<div class="card mt-24">' +
+          '<div class="card-head"><h2>本次答错的题</h2><span class="sub">' + wrong.length + ' 题</span></div>' +
+          '<div class="q-list">' +
+            wrong.map(function (w) {
+              return '' +
+                '<div class="q-item">' +
+                  '<div class="q-item-main">' +
+                    '<div class="q-item-stem">' + App.escapeHtml(w.stem) + '</div>' +
+                    '<div class="q-item-meta">' +
+                      '<span class="tag tag-learning">答错</span>' +
+                      '<span class="tag tag-type">' + (App.TYPES[w.type] || w.type) + '</span>' +
+                    '</div>' +
+                  '</div>' +
+                '</div>';
+            }).join('') +
+          '</div>' +
+        '</div>';
+    }
+
+    area.innerHTML = '' +
+      '<div class="card">' +
+        '<div class="result-hero">' +
+          '<div class="result-score">' + right + '<small> / ' + total + '</small></div>' +
+          '<div class="result-label">' + comment + '</div>' +
+          '<div class="result-meta">' +
+            '<div><div class="k">正确率</div><div class="v">' + acc + '%</div></div>' +
+            '<div><div class="k">用时</div><div class="v">' + App.formatDuration(dur) + '</div></div>' +
+            '<div><div class="k">答错</div><div class="v">' + wrong.length + '</div></div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="card-pad" style="border-top:1px solid var(--border-soft);">' +
+          '<div class="gap-row" style="justify-content:center;">' +
+            '<a class="btn btn-lg" href="index.html">完成，回首页</a>' +
+            (wrong.length
+              ? '<button class="btn btn-soft btn-lg" id="btn-again-wrong">重练错题</button>'
+              : '') +
+            '<button class="btn btn-ghost btn-lg" id="btn-again">再来一轮</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      wrongHtml;
+
+    var bw = document.getElementById('btn-again-wrong');
+    if (bw) {
+      bw.addEventListener('click', function () {
+        var ids = wrong.map(function (w) { return w.id; }).join(',');
+        location.href = 'quiz.html?mode=ids&ids=' + encodeURIComponent(ids);
+      });
+    }
+    document.getElementById('btn-again').addEventListener('click', function () {
+      location.reload();
+    });
+  }
+
+  /* ---------- 空队列 ---------- */
+  function showEmpty() {
+    topBar.classList.add('hide');
+    area.innerHTML =
+      '<div class="card">' +
+        '<div class="empty">' +
+          '<div class="empty-icon">🎉</div>' +
+          '<h3>今天没有待复习的题目</h3>' +
+          '<p>所有题目都安排在未来复习，可以随机练几题巩固</p>' +
+          '<div class="gap-row" style="justify-content:center;">' +
+            '<a class="btn" href="quiz.html?mode=random&count=10">随机 10 题</a>' +
+            '<a class="btn btn-ghost" href="index.html">回首页</a>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+  }
+
+  /* ---------- 键盘快捷键 ---------- */
+  document.addEventListener('keydown', function (e) {
+    // 已被页面内控件处理过的事件不再重复响应
+    if (e.defaultPrevented) return;
+
+    var tag = (e.target.tagName || '').toLowerCase();
+    var typing = tag === 'input' || tag === 'textarea';
+    var onControl = tag === 'button' || tag === 'a' || tag === 'select';
+
+    // 已答题时：回车进入下一题（焦点在按钮上时交给按钮自身处理）
+    if (answered && e.key === 'Enter' && !onControl) {
+      e.preventDefault();
+      next();
+      return;
+    }
+    if (!answered && typing) return;
+
+    // 数字键选择选项
+    if (!answered && /^[1-9]$/.test(e.key)) {
+      var btns = document.querySelectorAll('.option');
+      var i = Number(e.key) - 1;
+      if (btns[i] && !btns[i].disabled) {
+        e.preventDefault();
+        btns[i].click();
+      }
+      return;
+    }
+
+    // 空格显示名词卡答案
+    if (!answered && e.key === ' ' && !typing) {
+      var reveal = document.getElementById('reveal-btn');
+      if (reveal) { e.preventDefault(); reveal.click(); }
+    }
+  });
+
+  /* ---------- 启动 ---------- */
+  queue = buildQueue();
+  if (!queue.length) {
+    showEmpty();
+  } else {
+    renderQuestion();
+  }
+
+})();
+</script>
+
+</body>
+</html>
